@@ -1,0 +1,1 @@
+plugins/rclonerc/** filter=git-crypt diff=git-crypt
