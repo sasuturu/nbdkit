@@ -104,6 +104,7 @@ non_lang_plugins="\
         ssh \
         streaming \
         tmpdisk \
+        treefiles \
         torrent \
         vddk \
         zero \
@@ -1311,6 +1312,7 @@ AC_CONFIG_FILES([Makefile
                  plugins/tcl/Makefile
                  plugins/tmpdisk/Makefile
                  plugins/torrent/Makefile
+                 plugins/treefiles/Makefile
                  plugins/vddk/Makefile
                  plugins/zero/Makefile
                  filters/Makefile

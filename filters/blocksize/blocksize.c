@@ -48,7 +48,7 @@
 #include "minmax.h"
 #include "rounding.h"
 
-#define BLOCKSIZE_MIN_LIMIT (64U * 1024)
+#define BLOCKSIZE_MIN_LIMIT (128U * 1024)
 
 /* In order to handle parallel requests safely, this lock must be held
  * when using the bounce buffer.
