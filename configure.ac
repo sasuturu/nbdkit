@@ -97,7 +97,7 @@ non_lang_plugins="\
         partitioning \
         pattern \
         random \
-        rclonerc \
+        rcmount \
         S3 \
         sparse-random \
         split \
@@ -1300,7 +1300,7 @@ AC_CONFIG_FILES([Makefile
                  plugins/perl/Makefile
                  plugins/python/Makefile
                  plugins/random/Makefile
-                 plugins/rclonerc/Makefile
+                 plugins/rcmount/Makefile
                  plugins/ruby/Makefile
                  plugins/rust/Makefile
                  plugins/S3/Makefile
