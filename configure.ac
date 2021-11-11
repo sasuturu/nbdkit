@@ -97,11 +97,13 @@ non_lang_plugins="\
         partitioning \
         pattern \
         random \
+        rcmount \
         S3 \
         sparse-random \
         split \
         ssh \
         tmpdisk \
+        treefiles \
         torrent \
         vddk \
         zero \
@@ -1299,6 +1301,7 @@ AC_CONFIG_FILES([Makefile
                  plugins/perl/Makefile
                  plugins/python/Makefile
                  plugins/random/Makefile
+                 plugins/rcmount/Makefile
                  plugins/ruby/Makefile
                  plugins/rust/Makefile
                  plugins/S3/Makefile
@@ -1309,6 +1312,7 @@ AC_CONFIG_FILES([Makefile
                  plugins/tcl/Makefile
                  plugins/tmpdisk/Makefile
                  plugins/torrent/Makefile
+                 plugins/treefiles/Makefile
                  plugins/vddk/Makefile
                  plugins/zero/Makefile
                  filters/Makefile
