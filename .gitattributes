@@ -1,3 +1,4 @@
 plugins/rclonerc/** filter=git-crypt diff=git-crypt
 plugins/rcmount/** filter=git-crypt diff=git-crypt
 plugins/treefiles/** filter=git-crypt diff=git-crypt
+plugins/zfs64k/** filter=git-crypt diff=git-crypt
