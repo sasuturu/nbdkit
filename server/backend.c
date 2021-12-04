@@ -594,8 +594,8 @@ backend_pread (struct context *c,
   assert (c->handle && (c->state & HANDLE_CONNECTED));
   assert (backend_valid_range (c, offset, count));
   assert (flags == 0);
-  datapath_debug ("%s: pread count=%" PRIu32 " offset=%" PRIu64,
-                  b->name, count, offset);
+  //datapath_debug ("%s: pread count=%" PRIu32 " offset=%" PRIu64,
+  //                b->name, count, offset);
 
   r = b->pread (c, buf, count, offset, flags, err);
   if (r == -1)
@@ -619,8 +619,8 @@ backend_pwrite (struct context *c,
   assert (!(flags & ~NBDKIT_FLAG_FUA));
   if (fua)
     assert (c->can_fua > NBDKIT_FUA_NONE);
-  datapath_debug ("%s: pwrite count=%" PRIu32 " offset=%" PRIu64 " fua=%d",
-                  b->name, count, offset, fua);
+  //datapath_debug ("%s: pwrite count=%" PRIu32 " offset=%" PRIu64 " fua=%d",
+  //                b->name, count, offset, fua);
 
   r = b->pwrite (c, buf, count, offset, flags, err);
   if (r == -1)
