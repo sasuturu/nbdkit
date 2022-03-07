@@ -75,6 +75,7 @@ lang_plugins="\
         "
 non_lang_plugins="\
         cdi \
+        chunknheader \
         curl \
         data \
         eval \
