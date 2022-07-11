@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include "../chunked/global.hpp"
+#include "global.hpp"
 
 void toRelPath(char *str, uint32_t chunkId) {
 	snprintf(str, 128, "%09o", chunkId);
@@ -54,16 +54,16 @@ void mkdir(char *PATH) {
 	}
 }
 
-int openExistingFile(uint32_t chunkId) {
+int openForRead(uint32_t chunkId) {
 	char relPath[128];
 	toRelPath(relPath, chunkId);
 	char absPath[512];
 	toAbsolutePath(absPath, global::config.BASE_PATH, relPath);
 
-	return open(absPath, (O_RDWR), 0660);
+	return open(absPath, (O_RDONLY), 0660);
 }
 
-int openNewFile(uint32_t chunkId) {
+int openForRW(uint32_t chunkId) {
 	//nbdkit_debug("openNewFile %lu", chunkId);
 	char relPath[128];
 	toRelPath(relPath, chunkId);

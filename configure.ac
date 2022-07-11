@@ -1276,6 +1276,7 @@ AC_CONFIG_FILES([Makefile
                  plugins/Makefile
                  plugins/cc/Makefile
                  plugins/cdi/Makefile
+                 plugins/chunked/Makefile
                  plugins/curl/Makefile
                  plugins/data/Makefile
                  plugins/eval/Makefile
