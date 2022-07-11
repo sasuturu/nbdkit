@@ -1,4 +1,5 @@
 #include "global.hpp"
+#include "fileops.hpp"
 
 #include <unistd.h>
 #include <cmath>
@@ -8,7 +9,6 @@
 #include <algorithm>
 #include <map>
 
-#include "fileops.hpp"
 
 using std::string;
 
@@ -18,7 +18,7 @@ bool global::ERROR = false;
 
 pthread_mutex_t global::mutex;
 pthread_cond_t global::cond;
-std::map<uint32_t, ch_state> global::openChunks;
+std::map<int64_t, ch_state> global::openChunks;
 uint64_t opCounter;
 uint64_t lastCleanedOp;
 
@@ -72,12 +72,8 @@ void global::do_apply_config(const char *key, const char *value) {
 		if(oVal != global::config.NUM_CHUNKS) nbdkit_error("export size in chunks changed %ld -> %ld", oVal, global::config.NUM_CHUNKS);
 	}
 	if(global::config.NUM_CHUNKS <= 0) {
-		nbdkit_error("Using default value %s for export size in chunks", DEFAULT_CHUNKS);
+		nbdkit_error("Using default value %d for export size in chunks", DEFAULT_CHUNKS);
 		global::config.NUM_CHUNKS = DEFAULT_CHUNKS;
-	}
-	if(global::config.NUM_CHUNKS > MAX_CHUNKS) {
-		nbdkit_error("Too many chunks! Reverting to max of %s.", MAX_CHUNKS);
-		global::config.NUM_CHUNKS = MAX_CHUNKS;
 	}
 
 	if(strcmp(key, "CHUNKED_BASE_PATH") == 0) {
@@ -93,7 +89,7 @@ void global::do_apply_config(const char *key, const char *value) {
 	}
 }
 
-ch_state& global::getChunkForRead(uint32_t chunkId) {
+ch_state& global::getChunkForRead(int64_t chunkId) {
 	lock();
 
 	ch_state& state = openChunks[chunkId];
@@ -127,7 +123,7 @@ ch_state& global::getChunkForRead(uint32_t chunkId) {
 	return state;
 }
 
-ch_state& global::getChunkForWrite(uint32_t chunkId) {
+ch_state& global::getChunkForWrite(int64_t chunkId) {
 	lock();
 
 	ch_state& state = openChunks[chunkId];
@@ -164,7 +160,7 @@ ch_state& global::getChunkForWrite(uint32_t chunkId) {
 	return state;
 }
 
-void global::finishedOp(uint32_t chunkId) {
+void global::finishedOp(int64_t chunkId) {
 	lock();
 	ch_state& state = openChunks[chunkId];
 	if(--state.busy == 0) {

@@ -1,14 +1,18 @@
-#include "../chunked/fileops.hpp"
+#include "global.hpp"
+#include "fileops.hpp"
 
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include "global.hpp"
 
-void toRelPath(char *str, uint32_t chunkId) {
-	snprintf(str, 128, "%09o", chunkId);
+void toRelPath(char *str, int64_t chunkId) {
+	if(chunkId == -1) {
+		snprintf(str, 128, "%s", "header.bin");
+		return;
+	}
+	snprintf(str, 128, "%09o", ((uint32_t)chunkId));
 	for (int i = 0; i < strlen(str); ++i) {
 		if (str[i] == 0) {
 			nbdkit_debug("SHOULD NOT GET HERE!");
@@ -54,7 +58,7 @@ void mkdir(char *PATH) {
 	}
 }
 
-int openForRead(uint32_t chunkId) {
+int openForRead(int64_t chunkId) {
 	char relPath[128];
 	toRelPath(relPath, chunkId);
 	char absPath[512];
@@ -63,7 +67,7 @@ int openForRead(uint32_t chunkId) {
 	return open(absPath, (O_RDONLY), 0660);
 }
 
-int openForRW(uint32_t chunkId) {
+int openForRW(int64_t chunkId) {
 	//nbdkit_debug("openNewFile %lu", chunkId);
 	char relPath[128];
 	toRelPath(relPath, chunkId);

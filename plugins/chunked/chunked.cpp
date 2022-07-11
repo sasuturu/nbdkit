@@ -1,9 +1,9 @@
+#include "global.hpp"
+#include "fileops.hpp"
 #include <config.h>
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
-#include "global.hpp"
-#include "fileops.hpp"
 
 
 ////////// NBDKIT IO //////////
@@ -11,9 +11,19 @@ static int chunked_pread(void *handle, void *buf, uint32_t count, uint64_t offse
 	try {
 		char *buffer = (char *) buf;
 		while(count > 0) {
-			uint64_t chunkId = offset / CHUNKSIZE;
-			uint64_t fileOffset = offset % CHUNKSIZE;
-			uint32_t fileCount = MIN(count, CHUNKSIZE - fileOffset);
+			int64_t chunkId;
+			uint64_t fileOffset;
+			uint32_t fileCount;
+
+			if(offset < HEADERSIZE) {
+				chunkId = -1;
+				fileOffset = offset;
+				fileCount = MIN(count, HEADERSIZE - fileOffset);
+			} else {
+				chunkId = (offset - HEADERSIZE) / CHUNKSIZE;
+				fileOffset = (offset - HEADERSIZE) % CHUNKSIZE;
+				fileCount = MIN(count, CHUNKSIZE - fileOffset);
+			}
 
 			ch_state state = global::getChunkForRead(chunkId);
 			readFile(state.fd, buffer, fileOffset, fileCount);
@@ -43,9 +53,19 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 
 		const char *buffer = (const char *) buf;
 		while(count > 0) {
-			uint64_t chunkId = offset / CHUNKSIZE;
-			uint64_t fileOffset = offset % CHUNKSIZE;
-			uint32_t fileCount = MIN(count, CHUNKSIZE - fileOffset);
+			int64_t chunkId;
+			uint64_t fileOffset;
+			uint32_t fileCount;
+
+			if(offset < HEADERSIZE) {
+				chunkId = -1;
+				fileOffset = offset;
+				fileCount = MIN(count, HEADERSIZE - fileOffset);
+			} else {
+				chunkId = (offset - HEADERSIZE) / CHUNKSIZE;
+				fileOffset = (offset - HEADERSIZE) % CHUNKSIZE;
+				fileCount = MIN(count, CHUNKSIZE - fileOffset);
+			}
 
 			ch_state state = global::getChunkForWrite(chunkId);
 			writeFile(state.fd, buffer, fileOffset, fileCount);
@@ -113,7 +133,7 @@ static int chunked_after_fork() {
 }
 
 static struct nbdkit_plugin plugin = {
-		.name = "treefiles",
+		.name = "chunked",
 		.version = PACKAGE_VERSION,
 		.load = chunked_load,
 		.unload = chunked_unload,

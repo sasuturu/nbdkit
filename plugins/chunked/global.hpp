@@ -9,9 +9,9 @@
 #define MAX(a, b)  (((a) > (b)) ? (a) : (b))
 
 #define CHUNKSIZE 1073741824l
+#define HEADERSIZE 33554432l
 #define DEFAULT_CHUNKS 4096
-#define MAX_CHUNKS 1048576
-#define MAX_OPEN_FILES 128
+#define MAX_OPEN_FILES 256
 
 #include <pthread.h>
 #include <map>
@@ -41,9 +41,9 @@ public:
 	static void INIT();
 	static void START();
 	static void apply_config();
-	static ch_state& getChunkForRead(uint32_t chunkId);
-	static ch_state& getChunkForWrite(uint32_t chunkId);
-	static void finishedOp(uint32_t chunkId);
+	static ch_state& getChunkForRead(int64_t chunkId);
+	static ch_state& getChunkForWrite(int64_t chunkId);
+	static void finishedOp(int64_t chunkId);
 	static void closeAllOpenFiles();
 	static struct ch_config config;
 	static bool ALIVE;
@@ -52,7 +52,7 @@ public:
 private:
 	static pthread_mutex_t mutex;
 	static pthread_cond_t cond;
-	static std::map<uint32_t, ch_state> openChunks;
+	static std::map<int64_t, ch_state> openChunks;
 	static void do_apply_config(const char *key, const char *value);
 	static void cleanup();
 
