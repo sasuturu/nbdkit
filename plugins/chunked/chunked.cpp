@@ -1,8 +1,8 @@
 #include <config.h>
-#include "global.hpp"
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
+#include "../chunked/global.hpp"
 
 
 ////////// NBDKIT IO //////////

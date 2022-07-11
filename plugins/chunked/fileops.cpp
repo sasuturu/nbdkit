@@ -1,10 +1,11 @@
-#include "fileops.hpp"
-#include "global.hpp"
+#include "../chunked/fileops.hpp"
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include "../chunked/global.hpp"
 
 void toRelPath(char *str, uint32_t chunkId) {
 	snprintf(str, 128, "%09o", chunkId);

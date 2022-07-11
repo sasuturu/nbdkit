@@ -31,20 +31,16 @@
 
 include $(top_srcdir)/common-rules.mk
 
-if HAVE_CURL
+plugin_LTLIBRARIES = nbdkit-chunked-plugin.la
 
-plugin_LTLIBRARIES = nbdkit-chunknheader-plugin.la
-
-nbdkit_chunknheader_plugin_la_SOURCES = \
-	chunk.cpp \
-	curlops.cpp \
+nbdkit_chunked_plugin_la_SOURCES = \
+	chunked.cpp \
 	fileops.cpp \
 	global.cpp \
-	chunknheader.cpp \
 	$(top_srcdir)/include/nbdkit-plugin.h \
 	$(NULL)
 
-nbdkit_chunknheader_plugin_la_CPPFLAGS = \
+nbdkit_chunked_plugin_la_CPPFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/common/include \
 	-I$(top_srcdir)/common/replacements \
@@ -52,17 +48,13 @@ nbdkit_chunknheader_plugin_la_CPPFLAGS = \
 	-I/usr/include/c++/9 \
 	-I/usr/include/x86_64-linux-gnu/c++/9 \
 	$(NULL)
-nbdkit_chunknheader_plugin_la_CFLAGS = \
+nbdkit_chunked_plugin_la_CFLAGS = \
 	$(WARNINGS_CFLAGS) \
-	$(CURL_CFLAGS) \
 	$(NULL)
-nbdkit_chunknheader_plugin_la_LIBADD = \
+nbdkit_chunked_plugin_la_LIBADD = \
 	$(IMPORT_LIBRARY_ON_WINDOWS) \
-	$(CURL_LIBS) \
 	$(NULL)
-nbdkit_chunknheader_plugin_la_LDFLAGS = \
+nbdkit_chunked_plugin_la_LDFLAGS = \
 	-module -avoid-version -shared $(NO_UNDEFINED_ON_WINDOWS) \
 	-Wl,--version-script=$(top_srcdir)/plugins/plugins.syms \
 	$(NULL)
-
-endif
