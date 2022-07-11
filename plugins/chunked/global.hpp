@@ -39,22 +39,17 @@ struct ch_state {
 class global {
 public:
 	static void INIT();
-	static void START();
 	static void apply_config();
 	static ch_state& getChunkForRead(int64_t chunkId);
 	static ch_state& getChunkForWrite(int64_t chunkId);
 	static void finishedOp(int64_t chunkId);
 	static void closeAllOpenFiles();
 	static struct ch_config config;
-	static bool ALIVE;
 	static bool ERROR;
 
 private:
 	static pthread_mutex_t mutex;
 	static pthread_cond_t cond;
-	static std::map<int64_t, ch_state> openChunks;
-	static void do_apply_config(const char *key, const char *value);
-	static void cleanup();
 
 	static inline void lock() {
 		if(pthread_mutex_lock(&mutex)) {
@@ -79,6 +74,5 @@ private:
 			throw "pthread_cond_broadcast failed!";
 		}
 	}
-
 };
 #endif

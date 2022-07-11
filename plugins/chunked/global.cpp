@@ -13,18 +13,17 @@
 using std::string;
 
 struct ch_config global::config;
-bool global::ALIVE = true;
 bool global::ERROR = false;
 
 pthread_mutex_t global::mutex;
 pthread_cond_t global::cond;
-std::map<int64_t, ch_state> global::openChunks;
+
+std::map<int64_t, ch_state> openChunks;
 uint64_t opCounter;
 uint64_t lastCleanedOp;
 
 void global::INIT() {
 	nbdkit_debug("global::INIT");
-	ALIVE = true;
 	ERROR = false;
 
 	if(pthread_mutex_init(&mutex, NULL)) {
@@ -42,30 +41,7 @@ void global::INIT() {
 	strcpy(global::config.EXPORT_NAME, "testExport");
 }
 
-void global::START() {
-}
-
-void global::apply_config() {
-	std::ifstream cFile ("chunked.conf");
-	if (cFile.is_open()) {
-		std::string line;
-		while(getline(cFile, line)) {
-			line.erase(std::remove_if(line.begin(), line.end(), isspace), line.end());
-			if(line.empty() || line[0] == '#' ) {
-				continue;
-			}
-			auto delimiterPos = line.find("=");
-			string name = line.substr(0, delimiterPos);
-			string value = line.substr(delimiterPos + 1);
-			global::do_apply_config(name.c_str(), value.c_str());
-		}
-	}
-	else {
-		std::cerr << "Couldn't open config file for reading.\n";
-	}
-}
-
-void global::do_apply_config(const char *key, const char *value) {
+void do_apply_config(const char *key, const char *value) {
 	if(strcmp(key, "CHUNKED_NUM_CHUNKS") == 0) {
 		int64_t oVal = global::config.NUM_CHUNKS;
 		global::config.NUM_CHUNKS = nbdkit_parse_size(value);
@@ -86,6 +62,40 @@ void global::do_apply_config(const char *key, const char *value) {
 		char *oVal = global::config.EXPORT_NAME;
 		strcpy(global::config.EXPORT_NAME, value);
 		if(strcmp(oVal, global::config.EXPORT_NAME)) nbdkit_error("export name changed %s -> %s", oVal, global::config.EXPORT_NAME);
+	}
+}
+
+void global::apply_config() {
+	std::ifstream cFile ("chunked.conf");
+	if (cFile.is_open()) {
+		std::string line;
+		while(getline(cFile, line)) {
+			line.erase(std::remove_if(line.begin(), line.end(), isspace), line.end());
+			if(line.empty() || line[0] == '#' ) {
+				continue;
+			}
+			auto delimiterPos = line.find("=");
+			string name = line.substr(0, delimiterPos);
+			string value = line.substr(delimiterPos + 1);
+			do_apply_config(name.c_str(), value.c_str());
+		}
+	}
+	else {
+		std::cerr << "Couldn't open config file for reading.\n";
+	}
+}
+
+void cleanup() {
+	int tries = 0;
+	while(openChunks.size() > MAX_OPEN_FILES && tries++ < 4) {
+		lastCleanedOp = lastCleanedOp + (opCounter-lastCleanedOp)/10;
+		for(auto it=openChunks.begin();it != openChunks.end(); ++it) {
+			ch_state& state = it->second;
+			if(state.busy == 0 && state.lastOp < lastCleanedOp) {
+				openChunks.erase(it);
+				break;
+			}
+		}
 	}
 }
 
@@ -167,20 +177,6 @@ void global::finishedOp(int64_t chunkId) {
 		notifyAll();
 	}
 	unlock();
-}
-
-void global::cleanup() {
-	int tries = 0;
-	while(openChunks.size() > MAX_OPEN_FILES && tries++ < 4) {
-		lastCleanedOp = lastCleanedOp + (opCounter-lastCleanedOp)/10;
-		for(auto it=openChunks.begin();it != openChunks.end(); ++it) {
-			ch_state& state = it->second;
-			if(state.busy == 0 && state.lastOp < lastCleanedOp) {
-				openChunks.erase(it);
-				break;
-			}
-		}
-	}
 }
 
 void global::closeAllOpenFiles() {
