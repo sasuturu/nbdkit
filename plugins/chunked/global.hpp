@@ -45,17 +45,22 @@ struct ch_state {
 class global {
 public:
 	static void INIT();
+	static void START();
 	static void apply_config();
 	static ch_state& getChunkForRead(int64_t chunkId);
 	static ch_state& getChunkForWrite(int64_t chunkId);
 	static void finishedOp(int64_t chunkId, uint32_t bytesWritten);
 	static void closeAllOpenFiles();
+	static void shutdown();
 	static struct ch_config config;
 	static bool ERROR;
+	static bool ALIVE;
 
 private:
 	static pthread_mutex_t mutex;
 	static pthread_cond_t cond;
+	static pthread_t timer;
+	static void *timer_main(void *args);
 
 	static uint32_t waiting;
 

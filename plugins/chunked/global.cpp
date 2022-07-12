@@ -15,30 +15,21 @@ using std::string;
 
 struct ch_config global::config;
 bool global::ERROR;
+bool global::ALIVE;
 
 pthread_mutex_t global::mutex;
 pthread_cond_t global::cond;
 uint32_t global::waiting;
 
 std::map<int64_t, ch_state> openChunks;
-uint32_t timeUpdate;
 time_t now;
 time_t lastCleaned;
 time_t lastConfig;
 
-bool updateTime(bool forced) {
-	time_t old = now;
-	if(forced) {
-		now = time(0);
-	} else if((timeUpdate = ++timeUpdate % 4) == 0) {
-		now = time(0);
-	}
-	return old != now;
-}
-
 void global::INIT() {
 	nbdkit_debug("global::INIT");
 	global::ERROR = false;
+	global::ALIVE = true;
 
 	if(pthread_mutex_init(&mutex, NULL)) {
 		throw "mutex_init failed!";
@@ -48,8 +39,7 @@ void global::INIT() {
 	}
 	global::waiting = 0;
 
-	timeUpdate = 0;
-	updateTime(true);
+	now = time(0);
 	lastCleaned = now;
 	lastConfig = now;
 
@@ -114,21 +104,20 @@ void global::apply_config() {
 }
 
 void cleanup() {
-	updateTime(false);
 	//Iterate all for one time
 	for(auto it=openChunks.begin(); it != openChunks.end(); ) {
 		ch_state& state = it->second;
 		if(state.busy == 0) {
 			//Been open for too long, regardless of last op
 			if(state.opened < now - global::config.MAX_OPEN_MINUTES*60) {
-				nbdkit_debug("Closing too old chunk %ld, opened=%ld, now=%ld.", it->first, state.opened, now);
+				nbdkit_debug("Closing too old chunk %ld, opened=%ld, now=%ld, open=%ld.", it->first, state.opened, now, openChunks.size());
 				closeFd(state.fd);
 				it = openChunks.erase(it);
 				continue;
 			}
 			//Written full
 			if(state.written >= CHUNKSIZE && state.lastOp < now - global::config.FULLWRITE_LINGER_MINUTES*60) {
-				nbdkit_debug("Closing fully written chunk %ld, lastOp=%ld, now=%ld.", it->first, state.lastOp, now);
+				nbdkit_debug("Closing fully written chunk %ld, lastOp=%ld, now=%ld, open=%ld.", it->first, state.lastOp, now, openChunks.size());
 				closeFd(state.fd);
 				it = openChunks.erase(it);
 				continue;
@@ -143,6 +132,7 @@ void cleanup() {
 		for(auto it=openChunks.begin();it != openChunks.end(); ++it) {
 			ch_state& state = it->second;
 			if(state.busy == 0 && state.lastOp < lastCleaned) {
+				nbdkit_debug("Closing oldish chunk %ld (write=%d), lastOp=%ld, lastCleaned=%ld, now=%ld, open=%ld.", it->first, state.write, state.lastOp, lastCleaned, now, openChunks.size());
 				openChunks.erase(it);
 				deleted = true;
 				break;
@@ -166,9 +156,10 @@ ch_state& global::getChunkForRead(int64_t chunkId) {
 		return state;
 	}
 
-	updateTime(true);
+	now = time(0);
 	int fd = openForRead(chunkId);
 	if(fd >= 0) {
+		nbdkit_debug("Opened existing chunk %ld for read, open=%ld.", chunkId, openChunks.size());
 		state.fd = fd;
 		state.opened = now;
 		state.lastOp = now;
@@ -179,6 +170,7 @@ ch_state& global::getChunkForRead(int64_t chunkId) {
 	}
 
 	fd = openForRW(chunkId);
+	nbdkit_debug("Opened NEW chunk %ld \"for read\", open=%ld.", chunkId, openChunks.size());
 	state.fd = fd;
 	state.opened = now;
 	state.lastOp = now;
@@ -201,9 +193,10 @@ ch_state& global::getChunkForWrite(int64_t chunkId) {
 			return state;
 		}
 
-		updateTime(true);
+		now = time(0);
 		if(state.fd < 0) {
 			state.fd = openForRW(chunkId);
+			nbdkit_debug("Opened chunk %ld for write, open=%ld.", chunkId, openChunks.size());
 			state.opened = now;
 			state.lastOp = now;
 			state.write = true;
@@ -219,8 +212,10 @@ ch_state& global::getChunkForWrite(int64_t chunkId) {
 
 		if(state.fd >= 0) {
 			closeFd(state.fd);
+			nbdkit_debug("Closed RO chunk %ld, open=%ld.", chunkId, openChunks.size());
 		}
 		state.fd = openForRW(chunkId);
+		nbdkit_debug("\t...and opened chunk %ld for writing, open=%ld.", chunkId, openChunks.size());
 		state.opened = now;
 		state.lastOp = now;
 		state.write = true;
@@ -237,10 +232,6 @@ void global::finishedOp(int64_t chunkId, uint32_t bytesWritten) {
 	if(--state.busy == 0) {
 		cleanup();
 		notifyAll();
-	}
-	if(now-lastConfig >= 120) {
-		apply_config();
-		lastConfig = now;
 	}
 	unlock();
 }
@@ -261,4 +252,38 @@ void global::closeAllOpenFiles() {
 		}
 	}
 	unlock();
+	nbdkit_debug("\tAll open chunks closed.");
+}
+
+void global::shutdown() {
+	nbdkit_debug("global::shutdown");
+	ALIVE = false;
+	pthread_join(timer, NULL);
+	nbdkit_debug("\tDone.");
+}
+
+void global::START() {
+	if(pthread_create(&timer, NULL, &timer_main, NULL)) {
+		throw "pthread_create failed!";
+	}
+}
+
+void *global::timer_main(void *args) {
+	nbdkit_debug("timer_main");
+	uint32_t counter = 0;
+	while(ALIVE) {
+		sleep(2);
+		lock();
+		now = time(0);
+		if(now-lastConfig >= 120) {
+			apply_config();
+			lastConfig = now;
+		}
+		if((counter = ++counter % 4) == 0) {
+			cleanup();
+		}
+		unlock();
+	}
+	nbdkit_debug("timer thread exited");
+	return NULL;
 }
