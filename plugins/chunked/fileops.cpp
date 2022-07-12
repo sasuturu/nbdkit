@@ -84,7 +84,7 @@ int openForRW(int64_t chunkId) {
 		nbdkit_error("FAILED TO OPEN FILE %s: %d %s", absPath, errno, strerror(errno));
 		throw "FAILED TO OPEN FILE";
 	}
-	if(ftruncate(file, CHUNKSIZE)) {
+	if(ftruncate(file, chunkId == -1 ? HEADERSIZE : CHUNKSIZE)) {
 		nbdkit_error("FTRUNCATE FAILED %s: %d %s", absPath, errno, strerror(errno));
 		throw "FTRUNCATE FAILED";
 	}

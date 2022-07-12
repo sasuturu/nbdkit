@@ -10,8 +10,6 @@
 
 #define CHUNKSIZE 1073741824l
 #define HEADERSIZE 33554432l
-#define DEFAULT_CHUNKS 4096
-#define MAX_OPEN_FILES 256
 
 #include <pthread.h>
 #include <map>
@@ -20,19 +18,27 @@ struct ch_config {
 	char BASE_PATH[128];
 	char EXPORT_NAME[128];
 	int64_t NUM_CHUNKS;
+	int64_t MAX_OPEN_FILES;
+	int64_t MAX_OPEN_MINUTES;
+	int64_t FULLWRITE_LINGER_MINUTES;
 };
 
 struct ch_state {
 	int fd;
-	uint64_t lastOp;
 	bool write;
 	uint32_t busy;
 
+	time_t opened;
+	time_t lastOp;
+	uint32_t written;
+
 	ch_state() {
 		fd = -1;
-		lastOp = 0;
 		write = false;
 		busy = 0;
+		opened = 0;
+		lastOp = 0;
+		written = 0;
 	}
 };
 
@@ -42,7 +48,7 @@ public:
 	static void apply_config();
 	static ch_state& getChunkForRead(int64_t chunkId);
 	static ch_state& getChunkForWrite(int64_t chunkId);
-	static void finishedOp(int64_t chunkId);
+	static void finishedOp(int64_t chunkId, uint32_t bytesWritten);
 	static void closeAllOpenFiles();
 	static struct ch_config config;
 	static bool ERROR;
@@ -50,6 +56,8 @@ public:
 private:
 	static pthread_mutex_t mutex;
 	static pthread_cond_t cond;
+
+	static uint32_t waiting;
 
 	static inline void lock() {
 		if(pthread_mutex_lock(&mutex)) {
@@ -64,14 +72,18 @@ private:
 	}
 
 	static inline void wait() {
+		++waiting;
 		if(pthread_cond_wait(&cond, &mutex)) {
 			throw "pthread_cond_wait failed!";
 		}
+		--waiting;
 	}
 
 	static inline void notifyAll() {
-		if(pthread_cond_broadcast(&cond)) {
-			throw "pthread_cond_broadcast failed!";
+		if(waiting > 0) {
+			if(pthread_cond_broadcast(&cond)) {
+				throw "pthread_cond_broadcast failed!";
+			}
 		}
 	}
 };

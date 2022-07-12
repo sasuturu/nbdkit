@@ -27,7 +27,7 @@ static int chunked_pread(void *handle, void *buf, uint32_t count, uint64_t offse
 
 			ch_state state = global::getChunkForRead(chunkId);
 			readFile(state.fd, buffer, fileOffset, fileCount);
-			global::finishedOp(chunkId);
+			global::finishedOp(chunkId, 0);
 
 			buffer += fileCount;
 			count -= fileCount;
@@ -69,7 +69,7 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 
 			ch_state state = global::getChunkForWrite(chunkId);
 			writeFile(state.fd, buffer, fileOffset, fileCount);
-			global::finishedOp(chunkId);
+			global::finishedOp(chunkId, fileCount);
 
 			buffer += fileCount;
 			count -= fileCount;
@@ -106,8 +106,8 @@ static void chunked_unload(void) {
 }
 
 static int chunked_config(const char *key, const char *value) {
-	global::apply_config();
 	nbdkit_debug("got config %s = %s", key, value);
+	global::apply_config();
 	return 0;
 }
 
