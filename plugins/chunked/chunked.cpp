@@ -103,6 +103,7 @@ static void chunked_load(void) {
 static void chunked_unload(void) {
 	nbdkit_debug("chunked_unload");
 	global::closeAllOpenFiles();
+	global::shutdown();
 }
 
 static int chunked_config(const char *key, const char *value) {

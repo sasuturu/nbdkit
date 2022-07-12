@@ -19,6 +19,7 @@ bool global::ALIVE;
 
 pthread_mutex_t global::mutex;
 pthread_cond_t global::cond;
+pthread_t global::timer;
 uint32_t global::waiting;
 
 std::map<int64_t, ch_state> openChunks;
