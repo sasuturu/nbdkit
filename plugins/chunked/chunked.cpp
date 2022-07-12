@@ -125,7 +125,7 @@ static void chunked_close(void *handle) {
 	global::closeAllOpenFiles();
 }
 static int64_t chunked_get_size(void *handle) {
-	return global::config.NUM_CHUNKS * CHUNKSIZE;
+	return global::config.NUM_CHUNKS * CHUNKSIZE + HEADERSIZE;
 }
 static int chunked_after_fork() {
 	//global::START();
