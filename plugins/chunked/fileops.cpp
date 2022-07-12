@@ -125,6 +125,10 @@ void writeFile(int fd, const char *buf, off_t off, size_t len) {
 
 void closeFd(int fd) {
 	//nbdkit_debug("closeFd");
+	if(fd < 0) {
+		nbdkit_error("Won't try to close invalid fd %d", fd);
+		return;
+	}
 	if(close(fd)) {
 		throw "close file failed!";
 	}

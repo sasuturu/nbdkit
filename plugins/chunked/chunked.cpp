@@ -86,6 +86,7 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 }
 
 static int chunked_flush (void *handle, uint32_t flags) {
+	nbdkit_debug("chunked_flush");
 	global::closeAllOpenFiles();
 	return 0;
 }

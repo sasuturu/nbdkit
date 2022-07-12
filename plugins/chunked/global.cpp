@@ -134,6 +134,7 @@ void cleanup() {
 			ch_state& state = it->second;
 			if(state.busy == 0 && state.lastOp < lastCleaned) {
 				nbdkit_debug("Closing oldish chunk %ld (write=%d), lastOp=%ld, lastCleaned=%ld, now=%ld, open=%ld.", it->first, state.write, state.lastOp, lastCleaned, now, openChunks.size());
+				closeFd(state.fd);
 				openChunks.erase(it);
 				deleted = true;
 				break;
@@ -243,6 +244,7 @@ void global::closeAllOpenFiles() {
 		for(auto it=openChunks.begin(); it != openChunks.end(); ) {
 			ch_state& state = it->second;
 			if(state.busy == 0) {
+				closeFd(state.fd);
 				it = openChunks.erase(it);
 			} else {
 				++it;
