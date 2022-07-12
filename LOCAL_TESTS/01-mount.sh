@@ -10,9 +10,9 @@ rclone -vv \
 --poll-interval 0 \
 --buffer-size 1M \
 --vfs-cache-mode writes \
---vfs-cache-max-age 20m \
+--vfs-cache-max-age 2m \
 --vfs-cache-max-size 256G \
---vfs-cache-poll-interval 5m \
+--vfs-cache-poll-interval 1m \
 --vfs-write-back 2m \
 --vfs-read-chunk-size 256K \
 --vfs-read-chunk-size-limit 128M \
