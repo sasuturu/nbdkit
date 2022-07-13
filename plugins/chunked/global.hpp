@@ -19,7 +19,8 @@ struct ch_config {
 	char EXPORT_NAME[128];
 	int64_t NUM_CHUNKS;
 	int64_t MAX_OPEN_FILES;
-	int64_t MAX_OPEN_MINUTES;
+	int64_t MAX_LINGER_MINUTES;
+	int64_t JUST_TOO_OLD_MINUTES;
 	int64_t FULLWRITE_LINGER_MINUTES;
 };
 

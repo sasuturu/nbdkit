@@ -67,7 +67,8 @@ void parseSizeParam(const char *key, const char *value, const char *expected, in
 void do_apply_config(const char *key, const char *value) {
 	parseSizeParam(key, value, "CHUNKED_NUM_CHUNKS", &global::config.NUM_CHUNKS, 1, 1024*1024, 4096);
 	parseSizeParam(key, value, "CHUNKED_MAX_OPEN_FILES", &global::config.MAX_OPEN_FILES, 0, 2048, 128);
-	parseSizeParam(key, value, "CHUNKED_MAX_OPEN_MINUTES", &global::config.MAX_OPEN_MINUTES, 0, 100800, 120);
+	parseSizeParam(key, value, "CHUNKED_MAX_LINGER_MINUTES", &global::config.MAX_LINGER_MINUTES, 0, 100800, 60);
+	parseSizeParam(key, value, "CHUNKED_JUST_TOO_OLD_MINUTES", &global::config.JUST_TOO_OLD_MINUTES, 0, 100800, 120);
 	parseSizeParam(key, value, "CHUNKED_FULLWRITE_LINGER_MINUTES", &global::config.FULLWRITE_LINGER_MINUTES, 0, 100800, 10);
 
 
@@ -110,8 +111,15 @@ void cleanup() {
 		ch_state& state = it->second;
 		if(state.busy == 0) {
 			//Been open for too long, regardless of last op
-			if(state.opened < now - global::config.MAX_OPEN_MINUTES*60) {
+			if(state.opened < now - global::config.JUST_TOO_OLD_MINUTES*60) {
 				nbdkit_debug("Closing too old chunk %ld, opened=%ld, now=%ld, open=%ld.", it->first, state.opened, now, openChunks.size());
+				closeFd(state.fd);
+				it = openChunks.erase(it);
+				continue;
+			}
+			//Lingering after last op
+			if(state.lastOp < now - global::config.MAX_LINGER_MINUTES*60) {
+				nbdkit_debug("Closing lingering chunk %ld, lastOp=%ld, now=%ld, open=%ld.", it->first, state.lastOp, now, openChunks.size());
 				closeFd(state.fd);
 				it = openChunks.erase(it);
 				continue;
