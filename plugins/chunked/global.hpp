@@ -8,7 +8,7 @@
 #define MIN(a, b)  (((a) < (b)) ? (a) : (b))
 #define MAX(a, b)  (((a) > (b)) ? (a) : (b))
 
-#define CHUNKSIZE 1073741824l
+#define CHUNKSIZE 268435456l
 #define HEADERSIZE 33554432l
 
 #include <pthread.h>
