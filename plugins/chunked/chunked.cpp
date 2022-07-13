@@ -71,7 +71,7 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 			if(chunkId >= 0 && fileOffset != state.writePointer) {
 				nbdkit_debug("UNORDERED WRITE to chunk %lu. WP: %lu, offset: %lu.", chunkId, state.writePointer, fileOffset);
 			}
-			state.writePointer = fileOffset;
+			state.writePointer = fileOffset+fileCount;
 			writeFile(state.fd, buffer, fileOffset, fileCount);
 			global::finishedOp(chunkId, fileCount);
 
