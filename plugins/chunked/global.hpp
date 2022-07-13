@@ -33,6 +33,8 @@ struct ch_state {
 	time_t lastOp;
 	uint32_t written;
 
+	uint32_t writePointer;
+
 	ch_state() {
 		fd = -1;
 		write = false;
@@ -40,6 +42,7 @@ struct ch_state {
 		opened = 0;
 		lastOp = 0;
 		written = 0;
+		writePointer = 0;
 	}
 };
 

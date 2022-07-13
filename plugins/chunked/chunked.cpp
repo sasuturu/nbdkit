@@ -25,7 +25,7 @@ static int chunked_pread(void *handle, void *buf, uint32_t count, uint64_t offse
 				fileCount = MIN(count, CHUNKSIZE - fileOffset);
 			}
 
-			ch_state state = global::getChunkForRead(chunkId);
+			ch_state& state = global::getChunkForRead(chunkId);
 			readFile(state.fd, buffer, fileOffset, fileCount);
 			global::finishedOp(chunkId, 0);
 
@@ -67,7 +67,11 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 				fileCount = MIN(count, CHUNKSIZE - fileOffset);
 			}
 
-			ch_state state = global::getChunkForWrite(chunkId);
+			ch_state& state = global::getChunkForWrite(chunkId);
+			if(chunkId >= 0 && fileOffset != state.writePointer) {
+				nbdkit_debug("UNORDERED WRITE to chunk %lu. WP: %lu, offset: %lu.", chunkId, state.writePointer, fileOffset);
+			}
+			state.writePointer = fileOffset;
 			writeFile(state.fd, buffer, fileOffset, fileCount);
 			global::finishedOp(chunkId, fileCount);
 
