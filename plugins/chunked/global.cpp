@@ -133,7 +133,7 @@ void cleanup() {
 				continue;
 			}
 			//Written full
-			if(state.written >= CHUNKSIZE && state.lastOp < now - global::config.FULLWRITE_LINGER_MINUTES*60) {
+			if(state.pseudoWP >= CHUNKSIZE && state.lastOp < now - global::config.FULLWRITE_LINGER_MINUTES*60) {
 				nbdkit_debug("Closing fully written chunk %ld, lastOp=%ld, now=%ld, open=%ld.", it->first, state.lastOp, now, openChunks.size());
 				closeFile(state.fd);
 				it = openChunks.erase(it);
@@ -243,10 +243,10 @@ const ch_state& global::getChunkForWrite(int64_t chunkId) {
 	}
 }
 
-void global::finishedOp(int64_t chunkId, uint32_t bytesWritten) {
+void global::finishedOp(int64_t chunkId, off_t wrOff, size_t wrLen) {
 	lock();
 	ch_state& state = openChunks[chunkId];
-	state.written += bytesWritten;
+	state.pseudoWP = MAX(state.pseudoWP, wrOff + wrLen);
 	if(--state.busy == 0) {
 		cleanup();
 		notifyAll();
