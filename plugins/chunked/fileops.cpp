@@ -91,7 +91,7 @@ void readFile(int fd, char *buf, off_t off, size_t len) {
 	//nbdkit_debug("readFile");
 	while (len > 0) {
 		ssize_t r = pread (fd, buf, len, off);
-		if(r == 0 && errno == 0) {
+		if(r == 0) {
 			memset(buf, 0, len);
 			r = len;
 		} else if(r < 0) {
