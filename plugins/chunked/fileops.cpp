@@ -58,7 +58,7 @@ void mkdir(char *PATH) {
 	}
 }
 
-int openForRead(int64_t chunkId) {
+int openFileForRead(int64_t chunkId) {
 	char relPath[128];
 	toRelPath(relPath, chunkId);
 	char absPath[512];
@@ -67,7 +67,7 @@ int openForRead(int64_t chunkId) {
 	return open(absPath, (O_RDONLY), 0660);
 }
 
-int openForRW(int64_t chunkId) {
+int openFileForRW(int64_t chunkId) {
 	//nbdkit_debug("openNewFile %lu", chunkId);
 	char relPath[128];
 	toRelPath(relPath, chunkId);
@@ -84,10 +84,6 @@ int openForRW(int64_t chunkId) {
 		nbdkit_error("FAILED TO OPEN FILE %s: %d %s", absPath, errno, strerror(errno));
 		throw "FAILED TO OPEN FILE";
 	}
-	if(ftruncate(file, chunkId == -1 ? HEADERSIZE : CHUNKSIZE)) {
-		nbdkit_error("FTRUNCATE FAILED %s: %d %s", absPath, errno, strerror(errno));
-		throw "FTRUNCATE FAILED";
-	}
 	return file;
 }
 
@@ -95,13 +91,10 @@ void readFile(int fd, char *buf, off_t off, size_t len) {
 	//nbdkit_debug("readFile");
 	while (len > 0) {
 		ssize_t r = pread (fd, buf, len, off);
-		if (r == -1) {
-			nbdkit_error ("COULDN'T READ FILE, fd: %d, err: %d, errstr: %s", fd, errno, strerror(errno));
-			throw "FILE PREAD FAILED";
-		}
-		if (r == 0) {
-			nbdkit_error ("UNEXPECTED EOF!");
-			throw "UNEXPECTED EOF";
+		if(r <= 0) {
+			nbdkit_debug("File read failed, r: %ld, errno: %d, strerror: %s.", r, errno, strerror(errno));
+			memset(buf, 0, len);
+			r = len;
 		}
 		buf += r;
 		len -= r;
@@ -123,7 +116,7 @@ void writeFile(int fd, const char *buf, off_t off, size_t len) {
 	}
 }
 
-void closeFd(int fd) {
+void closeFile(int fd) {
 	//nbdkit_debug("closeFd");
 	if(fd < 0) {
 		nbdkit_error("Won't try to close invalid fd %d", fd);
@@ -131,5 +124,15 @@ void closeFd(int fd) {
 	}
 	if(close(fd)) {
 		throw "close file failed!";
+	}
+}
+
+void flushFile(int fd) {
+	if(fd < 0) {
+		nbdkit_error("Won't try to flush invalid fd %d", fd);
+		return;
+	}
+	if(fsync(fd)) {
+		throw "flush file failed!";
 	}
 }

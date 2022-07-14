@@ -67,9 +67,10 @@ void parseSizeParam(const char *key, const char *value, const char *expected, in
 void do_apply_config(const char *key, const char *value) {
 	parseSizeParam(key, value, "CHUNKED_NUM_CHUNKS", &global::config.NUM_CHUNKS, 1, 1024*1024, 4096);
 	parseSizeParam(key, value, "CHUNKED_MAX_OPEN_FILES", &global::config.MAX_OPEN_FILES, 0, 2048, 128);
-	parseSizeParam(key, value, "CHUNKED_MAX_LINGER_MINUTES", &global::config.MAX_LINGER_MINUTES, 0, 100800, 60);
-	parseSizeParam(key, value, "CHUNKED_JUST_TOO_OLD_MINUTES", &global::config.JUST_TOO_OLD_MINUTES, 0, 100800, 120);
-	parseSizeParam(key, value, "CHUNKED_FULLWRITE_LINGER_MINUTES", &global::config.FULLWRITE_LINGER_MINUTES, 0, 100800, 10);
+	parseSizeParam(key, value, "CHUNKED_MAX_READ_LINGER_MINUTES", &global::config.MAX_READ_LINGER_MINUTES, 0, 100800, 10);
+	parseSizeParam(key, value, "CHUNKED_MAX_WRITE_LINGER_MINUTES", &global::config.MAX_WRITE_LINGER_MINUTES, 0, 100800, 240);
+	parseSizeParam(key, value, "CHUNKED_JUST_TOO_OLD_MINUTES", &global::config.JUST_TOO_OLD_MINUTES, 0, 100800, 480);
+	parseSizeParam(key, value, "CHUNKED_FULLWRITE_LINGER_MINUTES", &global::config.FULLWRITE_LINGER_MINUTES, 0, 100800, 5);
 
 
 	if(strcmp(key, "CHUNKED_BASE_PATH") == 0) {
@@ -108,26 +109,33 @@ void global::apply_config() {
 void cleanup() {
 	//Iterate all for one time
 	for(auto it=openChunks.begin(); it != openChunks.end(); ) {
-		ch_state& state = it->second;
+		const ch_state& state = openChunks[it->first];
 		if(state.busy == 0) {
 			//Been open for too long, regardless of last op
 			if(state.opened < now - global::config.JUST_TOO_OLD_MINUTES*60) {
 				nbdkit_debug("Closing too old chunk %ld, opened=%ld, now=%ld, open=%ld.", it->first, state.opened, now, openChunks.size());
-				closeFd(state.fd);
+				closeFile(state.fd);
 				it = openChunks.erase(it);
 				continue;
 			}
-			//Lingering after last op
-			if(state.lastOp < now - global::config.MAX_LINGER_MINUTES*60) {
-				nbdkit_debug("Closing lingering chunk %ld, lastOp=%ld, now=%ld, open=%ld.", it->first, state.lastOp, now, openChunks.size());
-				closeFd(state.fd);
+			//Lingering after last read
+			if(state.write == false && state.lastOp < now - global::config.MAX_READ_LINGER_MINUTES*60) {
+				nbdkit_debug("Closing lingering (ro) chunk %ld, lastOp=%ld, now=%ld, open=%ld.", it->first, state.lastOp, now, openChunks.size());
+				closeFile(state.fd);
+				it = openChunks.erase(it);
+				continue;
+			}
+			//Lingering after last write
+			if(state.write == true && state.lastOp < now - global::config.MAX_WRITE_LINGER_MINUTES*60) {
+				nbdkit_debug("Closing lingering (rw) chunk %ld, lastOp=%ld, now=%ld, open=%ld.", it->first, state.lastOp, now, openChunks.size());
+				closeFile(state.fd);
 				it = openChunks.erase(it);
 				continue;
 			}
 			//Written full
 			if(state.written >= CHUNKSIZE && state.lastOp < now - global::config.FULLWRITE_LINGER_MINUTES*60) {
 				nbdkit_debug("Closing fully written chunk %ld, lastOp=%ld, now=%ld, open=%ld.", it->first, state.lastOp, now, openChunks.size());
-				closeFd(state.fd);
+				closeFile(state.fd);
 				it = openChunks.erase(it);
 				continue;
 			}
@@ -139,22 +147,22 @@ void cleanup() {
 	while(openChunks.size() > global::config.MAX_OPEN_FILES && tries++ < 4) {
 		bool deleted = false;
 		for(auto it=openChunks.begin();it != openChunks.end(); ++it) {
-			ch_state& state = it->second;
+			const ch_state& state = openChunks[it->first];
 			if(state.busy == 0 && state.lastOp < lastCleaned) {
 				nbdkit_debug("Closing oldish chunk %ld (write=%d), lastOp=%ld, lastCleaned=%ld, now=%ld, open=%ld.", it->first, state.write, state.lastOp, lastCleaned, now, openChunks.size());
-				closeFd(state.fd);
+				closeFile(state.fd);
 				openChunks.erase(it);
 				deleted = true;
 				break;
 			}
 		}
 		if(!deleted && openChunks.size() > global::config.MAX_OPEN_FILES) {
-			lastCleaned = lastCleaned + (now-lastCleaned)/20;
+			lastCleaned = lastCleaned + (now-lastCleaned)/25;
 		}
 	}
 }
 
-ch_state& global::getChunkForRead(int64_t chunkId) {
+const ch_state& global::getChunkForRead(int64_t chunkId) {
 	lock();
 
 	ch_state& state = openChunks[chunkId];
@@ -167,7 +175,7 @@ ch_state& global::getChunkForRead(int64_t chunkId) {
 	}
 
 	now = time(0);
-	int fd = openForRead(chunkId);
+	int fd = openFileForRead(chunkId);
 	if(fd >= 0) {
 		nbdkit_debug("Opened existing chunk %ld for read, open=%ld.", chunkId, openChunks.size());
 		state.fd = fd;
@@ -179,7 +187,7 @@ ch_state& global::getChunkForRead(int64_t chunkId) {
 		return state;
 	}
 
-	fd = openForRW(chunkId);
+	fd = openFileForRW(chunkId);
 	nbdkit_debug("Opened NEW chunk %ld \"for read\", open=%ld.", chunkId, openChunks.size());
 	state.fd = fd;
 	state.opened = now;
@@ -190,7 +198,7 @@ ch_state& global::getChunkForRead(int64_t chunkId) {
 	return state;
 }
 
-ch_state& global::getChunkForWrite(int64_t chunkId) {
+const ch_state& global::getChunkForWrite(int64_t chunkId) {
 	lock();
 
 	while(true) {
@@ -205,7 +213,7 @@ ch_state& global::getChunkForWrite(int64_t chunkId) {
 
 		now = time(0);
 		if(state.fd < 0) {
-			state.fd = openForRW(chunkId);
+			state.fd = openFileForRW(chunkId);
 			nbdkit_debug("Opened chunk %ld for write, open=%ld.", chunkId, openChunks.size());
 			state.opened = now;
 			state.lastOp = now;
@@ -221,10 +229,10 @@ ch_state& global::getChunkForWrite(int64_t chunkId) {
 		}
 
 		if(state.fd >= 0) {
-			closeFd(state.fd);
+			closeFile(state.fd);
 			nbdkit_debug("Closed RO chunk %ld, open=%ld.", chunkId, openChunks.size());
 		}
-		state.fd = openForRW(chunkId);
+		state.fd = openFileForRW(chunkId);
 		nbdkit_debug("\t...and opened chunk %ld for writing, open=%ld.", chunkId, openChunks.size());
 		state.opened = now;
 		state.lastOp = now;
@@ -246,13 +254,26 @@ void global::finishedOp(int64_t chunkId, uint32_t bytesWritten) {
 	unlock();
 }
 
-void global::closeAllOpenFiles() {
+void global::flush() {
+	lock();
+	for(auto it=openChunks.begin();it!=openChunks.end();++it) {
+		const ch_state& state = openChunks[it->first];
+		flushFile(state.fd);
+	}
+	unlock();
+	nbdkit_debug("\tFlushed.");
+}
+
+void global::shutdown() {
+	nbdkit_debug("global::shutdown");
+	ALIVE = false;
+	pthread_join(timer, NULL);
 	lock();
 	while(openChunks.size() > 0) {
 		for(auto it=openChunks.begin(); it != openChunks.end(); ) {
-			ch_state& state = it->second;
+			const ch_state& state = openChunks[it->first];
 			if(state.busy == 0) {
-				closeFd(state.fd);
+				closeFile(state.fd);
 				it = openChunks.erase(it);
 			} else {
 				++it;
@@ -263,13 +284,7 @@ void global::closeAllOpenFiles() {
 		}
 	}
 	unlock();
-	nbdkit_debug("\tAll open chunks closed.");
-}
 
-void global::shutdown() {
-	nbdkit_debug("global::shutdown");
-	ALIVE = false;
-	pthread_join(timer, NULL);
 	nbdkit_debug("\tDone.");
 }
 

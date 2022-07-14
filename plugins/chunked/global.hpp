@@ -19,7 +19,8 @@ struct ch_config {
 	char EXPORT_NAME[128];
 	int64_t NUM_CHUNKS;
 	int64_t MAX_OPEN_FILES;
-	int64_t MAX_LINGER_MINUTES;
+	int64_t MAX_READ_LINGER_MINUTES;
+	int64_t MAX_WRITE_LINGER_MINUTES;
 	int64_t JUST_TOO_OLD_MINUTES;
 	int64_t FULLWRITE_LINGER_MINUTES;
 };
@@ -33,8 +34,6 @@ struct ch_state {
 	time_t lastOp;
 	uint32_t written;
 
-	uint32_t writePointer;
-
 	ch_state() {
 		fd = -1;
 		write = false;
@@ -42,7 +41,6 @@ struct ch_state {
 		opened = 0;
 		lastOp = 0;
 		written = 0;
-		writePointer = 0;
 	}
 };
 
@@ -51,10 +49,10 @@ public:
 	static void INIT();
 	static void START();
 	static void apply_config();
-	static ch_state& getChunkForRead(int64_t chunkId);
-	static ch_state& getChunkForWrite(int64_t chunkId);
+	static const ch_state& getChunkForRead(int64_t chunkId);
+	static const ch_state& getChunkForWrite(int64_t chunkId);
 	static void finishedOp(int64_t chunkId, uint32_t bytesWritten);
-	static void closeAllOpenFiles();
+	static void flush();
 	static void shutdown();
 	static struct ch_config config;
 	static bool ERROR;

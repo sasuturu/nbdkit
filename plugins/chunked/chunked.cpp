@@ -8,6 +8,9 @@
 
 ////////// NBDKIT IO //////////
 static int chunked_pread(void *handle, void *buf, uint32_t count, uint64_t offset, uint32_t flags) {
+	if(!global::ALIVE) {
+		return -1;
+	}
 	try {
 		char *buffer = (char *) buf;
 		while(count > 0) {
@@ -25,7 +28,7 @@ static int chunked_pread(void *handle, void *buf, uint32_t count, uint64_t offse
 				fileCount = MIN(count, CHUNKSIZE - fileOffset);
 			}
 
-			ch_state& state = global::getChunkForRead(chunkId);
+			const ch_state& state = global::getChunkForRead(chunkId);
 			readFile(state.fd, buffer, fileOffset, fileCount);
 			global::finishedOp(chunkId, 0);
 
@@ -44,6 +47,9 @@ static int chunked_pread(void *handle, void *buf, uint32_t count, uint64_t offse
 }
 
 static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_t offset, uint32_t flags) {
+	if(!global::ALIVE) {
+		return -1;
+	}
 	if(global::ERROR) {
 		return -1;
 	}
@@ -67,11 +73,7 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 				fileCount = MIN(count, CHUNKSIZE - fileOffset);
 			}
 
-			ch_state& state = global::getChunkForWrite(chunkId);
-			if(chunkId >= 0 && fileOffset != state.writePointer) {
-				nbdkit_debug("UNORDERED WRITE to chunk %lu. WP: %lu, offset: %lu.", chunkId, state.writePointer, fileOffset);
-			}
-			state.writePointer = fileOffset+fileCount;
+			const ch_state& state = global::getChunkForWrite(chunkId);
 			writeFile(state.fd, buffer, fileOffset, fileCount);
 			global::finishedOp(chunkId, fileCount);
 
@@ -91,7 +93,7 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 
 static int chunked_flush (void *handle, uint32_t flags) {
 	nbdkit_debug("chunked_flush");
-	global::closeAllOpenFiles();
+	global::flush();
 	return 0;
 }
 
@@ -107,7 +109,6 @@ static void chunked_load(void) {
 
 static void chunked_unload(void) {
 	nbdkit_debug("chunked_unload");
-	global::closeAllOpenFiles();
 	global::shutdown();
 }
 
@@ -128,7 +129,7 @@ static void* chunked_open(int readonly) {
 }
 static void chunked_close(void *handle) {
 	nbdkit_debug("chunked_close");
-	global::closeAllOpenFiles();
+	global::flush();
 }
 static int64_t chunked_get_size(void *handle) {
 	return global::config.NUM_CHUNKS * CHUNKSIZE + HEADERSIZE;
