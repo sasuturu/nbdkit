@@ -118,7 +118,7 @@ void cleanup() {
 		if(state.busy == 0) {
 			//Been open for too long, regardless of last op
 			if(state.opened < now - global::config.JUST_TOO_OLD_MINUTES*60) {
-				nbdkit_debug("Closing too old chunk %ld, opened=%ld, now=%ld, open=%ld.", it->first, state.opened, now, openChunks.size());
+				nbdkit_debug("Closing too old chunk %ld, opened=%ld, now=%ld, open=%ld, cw=%lu.", it->first, state.opened, now, openChunks.size(), state.complWrites.size());
 				closeFile(state.fd);
 				it = openChunks.erase(it);
 				continue;
@@ -132,7 +132,7 @@ void cleanup() {
 			}
 			//Lingering after last write
 			if(state.write == true && state.lastOp < now - global::config.MAX_WRITE_LINGER_MINUTES*60) {
-				nbdkit_debug("Closing lingering (rw) chunk %ld, lastOp=%ld, now=%ld, open=%ld.", it->first, state.lastOp, now, openChunks.size());
+				nbdkit_debug("Closing lingering (rw) chunk %ld, lastOp=%ld, now=%ld, open=%ld, cw=%lu.", it->first, state.lastOp, now, openChunks.size(), state.complWrites.size());
 				closeFile(state.fd);
 				it = openChunks.erase(it);
 				continue;
@@ -154,7 +154,7 @@ void cleanup() {
 		for(auto it=openChunks.begin();it != openChunks.end() && openChunks.size() > global::config.MAX_OPEN_FILES; ) {
 			const ch_state& state = openChunks[it->first];
 			if(state.busy == 0 && state.lastOp < lruTime) {
-				nbdkit_debug("Closing oldish chunk %ld (write=%d), lastOp=%ld, lastCleaned=%ld, now=%ld, open=%ld.", it->first, state.write, state.lastOp, lruTime, now, openChunks.size());
+				nbdkit_debug("Closing oldish chunk %ld (write=%d), lastOp=%ld, lastCleaned=%ld, now=%ld, open=%ld, cw=%lu.", it->first, state.write, state.lastOp, lruTime, now, openChunks.size(), state.complWrites.size());
 				closeFile(state.fd);
 				it = openChunks.erase(it);
 				deleted = true;
@@ -210,18 +210,45 @@ const ch_state& global::getChunkForWrite(int64_t chunkId, uint64_t wrOff, uint32
 	while(true) {
 		ch_state& state = openChunks[chunkId];
 
-		if(wrOff < state.dataPresent && chunkId >= 0) {
-			nbdkit_debug("RESET chunk %ld", chunkId);
+		if(state.exclusive) {
+			wait();
+			continue;
+		}
+
+		if(wrOff < state.writePointer && chunkId >= 0) {
+			state.exclusive = true;
+			nbdkit_debug("RESET chunk %ld, wrOff=%lu, WP=%u", chunkId, wrOff, state.writePointer);
 			if(state.busy > 0) nbdkit_debug("\t...still busy, waiting.");
 			while(state.busy > 0) {
 				wait();
 				state = openChunks[chunkId];
 			}
 			if(state.fd >= 0) closeFile(state.fd);
-			unlinkFile(chunkId);
+			//TODO
+			//XXX
+			//FIXME
+			//while debugging
+			//unlinkFile(chunkId);
 			openChunks.erase(chunkId);
 			state = openChunks[chunkId];
+			nbdkit_debug("\tdone.");
 		}
+
+		if(state.complWrites.find(wrOff) != state.complWrites.end()) {
+			nbdkit_error("OVERWRITE");
+		}
+		state.complWrites[wrOff] = wrLen;
+		if(state.complWrites.size() > maxComplWritesSize) {
+			maxComplWritesSize = state.complWrites.size();
+			nbdkit_debug("COMPLETED WRITES MAX SIZE %u", maxComplWritesSize);
+		}
+
+		auto it=state.complWrites.begin();
+		while(it != state.complWrites.end() && it->first == state.writePointer) {
+			state.writePointer += it->second;
+			it = state.complWrites.erase(it);
+		}
+
 
 		if(state.fd >= 0 && state.write == true) {
 			state.lastOp = now;
@@ -243,8 +270,7 @@ const ch_state& global::getChunkForWrite(int64_t chunkId, uint64_t wrOff, uint32
 		now = time(0);
 		state.fd = openFileForRW(chunkId);
 		uint64_t size = getFileSize(state.fd);
-		nbdkit_debug("Opened chunk %ld for write, open=%ld.", chunkId, openChunks.size());
-		state.dataPresent = size;
+		nbdkit_debug("Opened chunk %ld for write, size=%lu, open=%ld.", chunkId, size, openChunks.size());
 		state.writePointer = size;
 		state.opened = now;
 		state.lastOp = now;
@@ -255,34 +281,9 @@ const ch_state& global::getChunkForWrite(int64_t chunkId, uint64_t wrOff, uint32
 	}
 }
 
-void global::finishedOp(int64_t chunkId, uint64_t wrOff, uint32_t wrLen) {
+void global::finishedOp(int64_t chunkId) {
 	lock();
 	ch_state& state = openChunks[chunkId];
-	state.writePointer = MAX(state.writePointer, wrOff + wrLen);
-	state.complWrites[wrOff] = wrLen;
-	if(state.complWrites.size() > maxComplWritesSize) {
-		maxComplWritesSize = state.complWrites.size();
-		nbdkit_debug("COMPLETED WRITES MAX SIZE %u", maxComplWritesSize);
-	}
-	bool found = true;
-	uint32_t minCompleted = state.writePointer;
-	while(found) {
-		found = false;
-		for(auto it=state.complWrites.begin();it!=state.complWrites.end(); ) {
-			minCompleted = MIN(minCompleted, it->first);
-			if(it->first == state.dataPresent) {
-				found = true;
-				state.dataPresent += it->second;
-				it = state.complWrites.erase(it);
-			} else {
-				++it;
-			}
-		}
-	}
-	if(state.complWrites.size() >= 64) {
-		nbdkit_debug("COMPLETED WRITES size >= 64 on chunk %ld, assuming hole and skipping %ud bytes.", chunkId, (state.dataPresent-minCompleted));
-		state.dataPresent = minCompleted;
-	}
 	if(--state.busy == 0) {
 		if((cleanupDiv = ++cleanupDiv % 2) == 0) {
 			lastCleanup = now;

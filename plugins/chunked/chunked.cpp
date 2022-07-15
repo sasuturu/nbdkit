@@ -30,7 +30,7 @@ static int chunked_pread(void *handle, void *buf, uint32_t count, uint64_t offse
 
 			const ch_state& state = global::getChunkForRead(chunkId);
 			readFile(state.fd, buffer, fileOffset, fileCount);
-			global::finishedOp(chunkId, 0, 0);
+			global::finishedOp(chunkId);
 
 			buffer += fileCount;
 			count -= fileCount;
@@ -75,7 +75,7 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 
 			const ch_state& state = global::getChunkForWrite(chunkId, fileOffset, fileCount);
 			writeFile(state.fd, buffer, fileOffset, fileCount);
-			global::finishedOp(chunkId, fileOffset, fileCount);
+			global::finishedOp(chunkId);
 
 			buffer += fileCount;
 			count -= fileCount;
