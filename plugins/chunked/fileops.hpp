@@ -14,5 +14,7 @@ void readFile(int fd, char *buffer, off_t off, size_t len);
 void writeFile(int fd, const char *buffer, off_t off, size_t len);
 void closeFile(int fd);
 void flushFile(int fd);
+void unlinkFile(int64_t chunkId);
+uint64_t getFileSize(int fd);
 
 #endif

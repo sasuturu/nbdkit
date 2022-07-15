@@ -73,7 +73,7 @@ static int chunked_pwrite(void *handle, const void *buf, uint32_t count, uint64_
 				fileCount = MIN(count, CHUNKSIZE - fileOffset);
 			}
 
-			const ch_state& state = global::getChunkForWrite(chunkId);
+			const ch_state& state = global::getChunkForWrite(chunkId, fileOffset, fileCount);
 			writeFile(state.fd, buffer, fileOffset, fileCount);
 			global::finishedOp(chunkId, fileOffset, fileCount);
 

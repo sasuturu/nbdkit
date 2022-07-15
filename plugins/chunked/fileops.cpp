@@ -139,3 +139,25 @@ void flushFile(int fd) {
 		throw "flush file failed!";
 	}
 }
+
+void unlinkFile(int64_t chunkId) {
+	//nbdkit_debug("unlinkFile %lu", chunkId);
+	char relPath[128];
+	toRelPath(relPath, chunkId);
+	char absPath[512];
+	toAbsolutePath(absPath, global::config.BASE_PATH, relPath);
+
+	if(unlink(absPath)) {
+		//TODO one off?
+		nbdkit_error("unlink failed %ld, did you clean up the cache manually?", chunkId);
+	}
+	//TODO rmdir
+}
+
+uint64_t getFileSize(int fd) {
+	struct stat sb;
+	if(fstat(fd, &sb)) {
+		throw "stat failed!";
+	}
+	return sb.st_size;
+}

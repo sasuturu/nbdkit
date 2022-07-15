@@ -32,7 +32,9 @@ struct ch_state {
 
 	time_t opened;
 	time_t lastOp;
-	uint32_t pseudoWP;
+	uint32_t writePointer;
+	uint32_t dataPresent;
+	std::map<uint64_t, uint32_t> complWrites;
 
 	ch_state() {
 		fd = -1;
@@ -40,7 +42,8 @@ struct ch_state {
 		busy = 0;
 		opened = 0;
 		lastOp = 0;
-		pseudoWP = 0;
+		writePointer = 0;
+		dataPresent = 0;
 	}
 };
 
@@ -50,8 +53,8 @@ public:
 	static void START();
 	static void apply_config();
 	static const ch_state& getChunkForRead(int64_t chunkId);
-	static const ch_state& getChunkForWrite(int64_t chunkId);
-	static void finishedOp(int64_t chunkId, off_t wrOff, size_t wrLen);
+	static const ch_state& getChunkForWrite(int64_t chunkId, uint64_t wrOff, uint32_t wrLen);
+	static void finishedOp(int64_t chunkId, uint64_t wrOff, uint32_t wrLen);
 	static void flush();
 	static void shutdown();
 	static struct ch_config config;
