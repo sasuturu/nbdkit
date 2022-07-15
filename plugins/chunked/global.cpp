@@ -24,8 +24,10 @@ uint32_t global::waiting;
 
 std::map<int64_t, ch_state> openChunks;
 time_t now;
-time_t lastCleaned;
+time_t lruTime;
 time_t lastConfig;
+time_t lastCleanup;
+uint32_t cleanupDiv;
 
 void global::INIT() {
 	nbdkit_debug("global::INIT");
@@ -41,8 +43,9 @@ void global::INIT() {
 	global::waiting = 0;
 
 	now = time(0);
-	lastCleaned = now;
+	lruTime = now;
 	lastConfig = now;
+	lastCleanup = now;
 
 	strcpy(global::config.BASE_PATH, "./mount/");
 	strcpy(global::config.EXPORT_NAME, "testExport");
@@ -146,18 +149,19 @@ void cleanup() {
 	int tries = 0;
 	while(openChunks.size() > global::config.MAX_OPEN_FILES && tries++ < 4) {
 		bool deleted = false;
-		for(auto it=openChunks.begin();it != openChunks.end(); ++it) {
+		for(auto it=openChunks.begin();it != openChunks.end() && openChunks.size() > global::config.MAX_OPEN_FILES; ) {
 			const ch_state& state = openChunks[it->first];
-			if(state.busy == 0 && state.lastOp < lastCleaned) {
-				nbdkit_debug("Closing oldish chunk %ld (write=%d), lastOp=%ld, lastCleaned=%ld, now=%ld, open=%ld.", it->first, state.write, state.lastOp, lastCleaned, now, openChunks.size());
+			if(state.busy == 0 && state.lastOp < lruTime) {
+				nbdkit_debug("Closing oldish chunk %ld (write=%d), lastOp=%ld, lastCleaned=%ld, now=%ld, open=%ld.", it->first, state.write, state.lastOp, lruTime, now, openChunks.size());
 				closeFile(state.fd);
-				openChunks.erase(it);
+				it = openChunks.erase(it);
 				deleted = true;
-				break;
+			} else {
+				++it;
 			}
 		}
 		if(!deleted && openChunks.size() > global::config.MAX_OPEN_FILES) {
-			lastCleaned = lastCleaned + (now-lastCleaned)/25;
+			lruTime = lruTime + MAX((now-lruTime)/25, 1);
 		}
 	}
 }
@@ -248,7 +252,10 @@ void global::finishedOp(int64_t chunkId, off_t wrOff, size_t wrLen) {
 	ch_state& state = openChunks[chunkId];
 	state.pseudoWP = MAX(state.pseudoWP, wrOff + wrLen);
 	if(--state.busy == 0) {
-		cleanup();
+		if((cleanupDiv = ++cleanupDiv % 2) == 0) {
+			lastCleanup = now;
+			cleanup();
+		}
 		notifyAll();
 	}
 	unlock();
@@ -258,7 +265,9 @@ void global::flush() {
 	lock();
 	for(auto it=openChunks.begin();it!=openChunks.end();++it) {
 		const ch_state& state = openChunks[it->first];
-		flushFile(state.fd);
+		if(state.write == true) {
+			flushFile(state.fd);
+		}
 	}
 	unlock();
 	nbdkit_debug("\tFlushed.");
@@ -296,16 +305,16 @@ void global::START() {
 
 void *global::timer_main(void *args) {
 	nbdkit_debug("timer_main");
-	uint32_t counter = 0;
 	while(ALIVE) {
 		sleep(2);
 		lock();
 		now = time(0);
 		if(now-lastConfig >= 120) {
-			apply_config();
 			lastConfig = now;
+			apply_config();
 		}
-		if((counter = ++counter % 4) == 0) {
+		if(now - lastCleanup >= 8) {
+			lastCleanup = now;
 			cleanup();
 		}
 		unlock();
