@@ -66,6 +66,7 @@ private:
 	static pthread_cond_t cond;
 	static pthread_t timer;
 	static void *timer_main(void *args);
+	static ch_state& ensureWritableFd(int64_t chunkId);
 
 	static uint32_t waiting;
 
